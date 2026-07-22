@@ -1,0 +1,22 @@
+{
+  "name": "baby-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server/index.js",
+    "dev:client": "npm run dev --prefix client",
+    "install:all": "npm install && npm install --prefix client",
+    "build:client": "npm run build --prefix client",
+    "start": "NODE_ENV=production node server/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "better-sqlite3": "9.4.3",
+    "concurrently": "8.2.2",
+    "cors": "2.8.5",
+    "express": "4.18.2",
+    "jsonwebtoken": "9.0.2",
+    "uuid": "9.0.0"
+  }
+}

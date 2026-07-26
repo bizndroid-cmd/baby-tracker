@@ -437,19 +437,20 @@ function parseAndSave(text, userId, babyId) {
   const diaperResult = tryParseDiaper(lower);
   if (diaperResult) {
     const id = uuidv4();
+    const timestamp = diaperResult.time || new Date().toISOString();
     db.prepare('INSERT INTO diapers (id, baby_id, user_id, type, changed_at) VALUES (?, ?, ?, ?, ?)').run(
-      id, babyId, userId, diaperResult.type, new Date().toISOString()
+      id, babyId, userId, diaperResult.type, timestamp
     );
     return diaperResult.label;
   }
 
   // Try sleep
   const sleepResult = tryParseSleep(lower);
-  if (sleepResult === 'WAKE') {
+  if (sleepResult === 'WAKE' || (sleepResult && sleepResult.wakeTime)) {
     // End last in-progress sleep
     const openSleep = db.prepare('SELECT * FROM sleep WHERE baby_id = ? AND user_id = ? AND end_time IS NULL ORDER BY start_time DESC LIMIT 1').get(babyId, userId);
     if (!openSleep) return '❌ No active sleep session to end.';
-    const endTime = new Date();
+    const endTime = sleepResult.wakeTime ? new Date(sleepResult.wakeTime) : new Date();
     const duration = Math.floor((endTime - new Date(openSleep.start_time)) / 60000);
     db.prepare('UPDATE sleep SET end_time = ?, duration_minutes = ? WHERE id = ?').run(endTime.toISOString(), duration, openSleep.id);
     const h = Math.floor(duration / 60);
@@ -568,18 +569,20 @@ function extractTime(text) {
 }
 
 function tryParseDiaper(text) {
-  // Explicit types
+  const parsedTime = extractTime(text);
+  const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+
   if (/\b(pee\s*(and|&|\+)\s*poop|poop\s*(and|&|\+)\s*pee|both|mixed)\b/.test(text)) {
-    return { type: 'both', label: '💧💩 Diaper (both) logged' };
+    return { type: 'both', time: parsedTime, label: `💧💩 Diaper (both)${timeLabel} logged` };
   }
   if (/\b(poop|pooped|dirty|stool|bm|bowel)\b/.test(text)) {
-    return { type: 'poop', label: '💩 Diaper (poop) logged' };
+    return { type: 'poop', time: parsedTime, label: `💩 Diaper (poop)${timeLabel} logged` };
   }
   if (/\b(pee|peed|wet|wee|urine)\b/.test(text)) {
-    return { type: 'pee', label: '💧 Diaper (pee) logged' };
+    return { type: 'pee', time: parsedTime, label: `💧 Diaper (pee)${timeLabel} logged` };
   }
   if (/\b(diaper|nappy)\b/.test(text) && !text.match(/\b(pee|poop|wet|dirty)\b/)) {
-    return { type: 'pee', label: '💧 Diaper (pee) logged (defaulted to pee)' };
+    return { type: 'pee', time: parsedTime, label: `💧 Diaper (pee)${timeLabel} logged` };
   }
   return null;
 }
@@ -597,7 +600,6 @@ function tryParseSleep(text) {
     const start = new Date(now); start.setHours(startH, startM, 0, 0);
     const end = new Date(now); end.setHours(endH, endM, 0, 0);
 
-    // If end < start, assume start was yesterday
     if (end <= start) start.setDate(start.getDate() - 1);
 
     const duration = Math.floor((end - start) / 60000);
@@ -608,28 +610,42 @@ function tryParseSleep(text) {
     }
   }
 
-  // "sleep/nap Xh Ym" or "slept for 2 hours"
+  // "sleep/nap Xh Ym" or "slept for 2 hours" — optionally "at Xpm"
   const durMatch = text.match(/(?:slept?|nap|napped)\s*(?:for\s*)?(?:(\d+)\s*(?:h|hours?|hrs?))?\s*(?:(\d+)\s*(?:m|min|minutes?))?/);
   if (durMatch && (durMatch[1] || durMatch[2])) {
     const hours = parseInt(durMatch[1] || 0);
     const mins = parseInt(durMatch[2] || 0);
     const totalMinutes = hours * 60 + mins;
     if (totalMinutes > 0 && totalMinutes <= 1440) {
-      const endTime = new Date();
-      const startTime = new Date(endTime.getTime() - totalMinutes * 60000);
+      const parsedTime = extractTime(text);
+      let endTime, startTime;
+      if (parsedTime) {
+        // "slept 2h at 3pm" means ended at 3pm, started 2h before
+        endTime = new Date(parsedTime);
+        startTime = new Date(endTime.getTime() - totalMinutes * 60000);
+      } else {
+        endTime = new Date();
+        startTime = new Date(endTime.getTime() - totalMinutes * 60000);
+      }
       const h = Math.floor(totalMinutes / 60);
       const m = totalMinutes % 60;
-      return { start: startTime.toISOString(), end: endTime.toISOString(), duration: totalMinutes, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}logged` };
+      const timeLabel = parsedTime ? ` (ended at ${endTime.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})})` : '';
+      return { start: startTime.toISOString(), end: endTime.toISOString(), duration: totalMinutes, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${timeLabel}logged` };
     }
   }
 
-  // Simple "sleep" or "nap" without duration — start session (no end)
-  if (/^(sleep|nap|sleeping|napping|asleep)$/.test(text)) {
-    return { start: new Date().toISOString(), end: null, duration: null, label: '😴 Sleep started (send "woke" or "awake" to end)' };
+  // Simple "sleep" or "nap" — optionally "at Xpm" to set start time
+  if (/^(sleep|nap|sleeping|napping|asleep)\b/.test(text)) {
+    const parsedTime = extractTime(text);
+    const startTime = parsedTime || new Date().toISOString();
+    const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+    return { start: startTime, end: null, duration: null, label: `😴 Sleep started${timeLabel} (send "woke" or "awake" to end)` };
   }
 
   // "woke" or "awake" — end last in-progress sleep
-  if (/^(woke|awake|wake|woken|up)$/.test(text)) {
+  if (/^(woke|awake|wake|woken|up)\b/.test(text)) {
+    const parsedTime = extractTime(text);
+    if (parsedTime) return { wakeTime: parsedTime };
     return 'WAKE';
   }
 

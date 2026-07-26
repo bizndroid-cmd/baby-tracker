@@ -91,20 +91,25 @@ function sendTelegramReminder(chatId, msg) {
 }
 
 function makeVoiceCall(phone, message) {
-  // STUB: Twilio integration point
-  // To activate:
-  // 1. npm install twilio
-  // 2. Set TWILIO_SID, TWILIO_TOKEN, TWILIO_PHONE env vars
-  // 3. Uncomment below:
-  //
-  // const twilio = require('twilio')(process.env.TWILIO_SID, process.env.TWILIO_TOKEN);
-  // twilio.calls.create({
-  //   twiml: `<Response><Say voice="alice">${message}</Say></Response>`,
-  //   to: phone,
-  //   from: process.env.TWILIO_PHONE,
-  // }).catch(err => console.error('Twilio call failed:', err.message));
+  const accountSid = process.env.TWILIO_SID;
+  const authToken = process.env.TWILIO_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE;
 
-  console.log(`[VOICE CALL STUB] Would call ${phone}: "${message}"`);
+  if (!accountSid || !authToken || !fromNumber) {
+    console.log('[VOICE CALL] Twilio not configured. Skipping call.');
+    return;
+  }
+
+  const twilio = require('twilio')(accountSid, authToken);
+  twilio.calls.create({
+    twiml: `<Response><Say voice="alice" language="en-US">${message}</Say><Pause length="1"/><Say voice="alice">Again. ${message}</Say></Response>`,
+    to: phone,
+    from: fromNumber,
+  }).then(call => {
+    console.log(`[VOICE CALL] Called ${phone}, SID: ${call.sid}`);
+  }).catch(err => {
+    console.error('[VOICE CALL] Failed:', err.message);
+  });
 }
 
 function formatInterval(minutes) {

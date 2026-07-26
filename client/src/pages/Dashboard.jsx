@@ -8,16 +8,16 @@ import StatsPanel from '../components/StatsPanel';
 import Modal from '../components/Modal';
 
 const TABS = [
+  { id: 'dashboard', label: '📊 Dashboard', path: '/dashboard' },
   { id: 'feeding', label: '🍼 Feeding', path: '/feeding' },
   { id: 'diaper', label: '🧷 Diaper', path: '/diaper' },
   { id: 'sleep', label: '😴 Sleep', path: '/sleep' },
-  { id: 'dashboard', label: '📊 Dashboard', path: '/dashboard' },
 ];
 
 export default function Dashboard({ user, onLogout }) {
   const { tab } = useParams();
   const navigate = useNavigate();
-  const activeTab = TABS.find((t) => t.id === tab)?.id || 'feeding';
+  const activeTab = TABS.find((t) => t.id === tab)?.id || 'dashboard';
 
   const [babies, setBabies] = useState([]);
   const [selectedBaby, setSelectedBaby] = useState(null);
@@ -32,7 +32,7 @@ export default function Dashboard({ user, onLogout }) {
 
   // Redirect root to /feeding
   useEffect(() => {
-    if (!tab) navigate('/feeding', { replace: true });
+    if (!tab) navigate('/dashboard', { replace: true });
   }, [tab]);
 
   const loadBabies = async () => {

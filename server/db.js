@@ -70,6 +70,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS telegram_links (
     chat_id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
+    active_baby_id TEXT,
     created_at TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );

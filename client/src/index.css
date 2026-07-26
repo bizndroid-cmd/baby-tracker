@@ -815,6 +815,96 @@ input::placeholder, textarea::placeholder {
   overflow-x: hidden;
 }
 
+/* === Profile Avatar & Dropdown === */
+.profile-avatar-wrapper {
+  position: relative;
+}
+
+.profile-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 2px solid var(--primary-light);
+}
+
+.profile-avatar:hover {
+  opacity: 1;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+}
+
+.profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+  min-width: 200px;
+  z-index: 200;
+  animation: slideUp 0.15s ease;
+  overflow: hidden;
+}
+
+.profile-dropdown-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-dropdown-name {
+  display: block;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.profile-dropdown-email {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.profile-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+}
+
+.profile-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border-radius: 0;
+  transition: background var(--transition);
+}
+
+.profile-dropdown-item:hover {
+  background: var(--bg);
+  opacity: 1;
+}
+
+.profile-dropdown-item-danger {
+  color: var(--danger);
+}
+
+.profile-dropdown-item-danger:hover {
+  background: var(--danger-light);
+}
+
 /* === Profile Management === */
 .profile-item {
   display: flex;

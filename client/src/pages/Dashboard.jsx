@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getBabies, createBaby } from '../api';
 import FeedingPanel from '../components/FeedingPanel';
@@ -13,7 +13,6 @@ const TABS = [
   { id: 'feeding', label: '🍼 Feeding' },
   { id: 'diaper', label: '🧷 Diaper' },
   { id: 'sleep', label: '😴 Sleep' },
-  { id: 'profiles', label: '⚙️ Profiles' },
 ];
 
 export default function Dashboard({ user, onLogout }) {
@@ -24,9 +23,12 @@ export default function Dashboard({ user, onLogout }) {
   const [babies, setBabies] = useState([]);
   const [selectedBaby, setSelectedBaby] = useState(null);
   const [showAddBaby, setShowAddBaby] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showManageProfiles, setShowManageProfiles] = useState(false);
   const [newBabyName, setNewBabyName] = useState('');
   const [newBabyDob, setNewBabyDob] = useState('');
   const [error, setError] = useState('');
+  const menuRef = useRef(null);
 
   useEffect(() => {
     loadBabies();
@@ -35,6 +37,17 @@ export default function Dashboard({ user, onLogout }) {
   useEffect(() => {
     if (!tab) navigate('/dashboard', { replace: true });
   }, [tab]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setShowProfileMenu(false);
+      }
+    };
+    if (showProfileMenu) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showProfileMenu]);
 
   const loadBabies = async () => {
     try {
@@ -81,6 +94,8 @@ export default function Dashboard({ user, onLogout }) {
     navigate(`/${tabId}`);
   };
 
+  const userInitial = user.name ? user.name.charAt(0).toUpperCase() : '?';
+
   return (
     <div className="app-layout">
       {/* Header */}
@@ -104,10 +119,39 @@ export default function Dashboard({ user, onLogout }) {
           <button className="btn-outline btn-sm" onClick={() => setShowAddBaby(true)}>
             + Baby
           </button>
-          <span className="nav-user">{user.name}</span>
-          <button className="btn-secondary btn-sm" onClick={onLogout}>
-            Logout
-          </button>
+
+          {/* Profile Avatar */}
+          <div className="profile-avatar-wrapper" ref={menuRef}>
+            <button
+              className="profile-avatar"
+              onClick={() => setShowProfileMenu(!showProfileMenu)}
+              aria-label="User menu"
+            >
+              {userInitial}
+            </button>
+
+            {showProfileMenu && (
+              <div className="profile-dropdown">
+                <div className="profile-dropdown-header">
+                  <span className="profile-dropdown-name">{user.name}</span>
+                  <span className="profile-dropdown-email">{user.email}</span>
+                </div>
+                <div className="profile-dropdown-divider" />
+                <button
+                  className="profile-dropdown-item"
+                  onClick={() => { setShowManageProfiles(true); setShowProfileMenu(false); }}
+                >
+                  👶 Manage Profiles
+                </button>
+                <button
+                  className="profile-dropdown-item profile-dropdown-item-danger"
+                  onClick={() => { setShowProfileMenu(false); onLogout(); }}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -138,13 +182,6 @@ export default function Dashboard({ user, onLogout }) {
           {activeTab === 'feeding' && <FeedingPanel babyId={selectedBaby.id} />}
           {activeTab === 'diaper' && <DiaperPanel babyId={selectedBaby.id} />}
           {activeTab === 'sleep' && <SleepPanel babyId={selectedBaby.id} />}
-          {activeTab === 'profiles' && (
-            <ManageProfiles
-              babies={babies}
-              onUpdate={handleProfileUpdate}
-              onDelete={handleProfileDelete}
-            />
-          )}
         </div>
       )}
 
@@ -158,13 +195,6 @@ export default function Dashboard({ user, onLogout }) {
               + Add Your Baby
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Show profiles tab even without baby selected */}
-      {babies.length === 0 && activeTab === 'profiles' && (
-        <div className="container">
-          <ManageProfiles babies={babies} onUpdate={handleProfileUpdate} onDelete={handleProfileDelete} />
         </div>
       )}
 
@@ -203,6 +233,15 @@ export default function Dashboard({ user, onLogout }) {
             <button type="button" className="btn-secondary" onClick={() => setShowAddBaby(false)}>Cancel</button>
           </div>
         </form>
+      </Modal>
+
+      {/* Manage Profiles Modal */}
+      <Modal open={showManageProfiles} onClose={() => setShowManageProfiles(false)} title="Manage Baby Profiles">
+        <ManageProfiles
+          babies={babies}
+          onUpdate={handleProfileUpdate}
+          onDelete={handleProfileDelete}
+        />
       </Modal>
     </div>
   );

@@ -1,0 +1,48 @@
+name: CI - Build & Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches-ignore: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install server dependencies
+        run: npm install
+
+      - name: Install client dependencies
+        run: cd client && npm install
+
+      - name: Build client
+        run: cd client && npm run build
+
+      - name: Run API tests
+        run: |
+          node -e "
+          const http = require('http');
+          function req(m,p,b,t){return new Promise((ok,no)=>{const o={hostname:'127.0.0.1',port:3001,path:p,method:m,headers:{'Content-Type':'application/json'}};if(t)o.headers.Authorization='Bearer '+t;const r=http.request(o,res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>ok({s:res.statusCode,j:()=>{try{return JSON.parse(d)}catch{return null}}}))});r.on('error',no);if(b)r.write(JSON.stringify(b));r.end()})}
+          require('./server/index.js');
+          setTimeout(async()=>{let p=0,f=0;function c(n,ok){if(ok)p++;else{f++;console.log('FAIL:',n)}}
+          let r=await req('POST','/api/auth/register',{email:'t@t.com',password:'pass123',name:'T'});let tk=r.j()?.token;c('register',r.s===201);
+          r=await req('POST','/api/babies',{name:'B'},tk);let bid=r.j()?.id;c('baby',r.s===201);
+          r=await req('POST','/api/feedings/'+bid,{type:'breast',duration_minutes:10,fed_at:'2026-07-21T08:00:00Z'},tk);c('feed',r.s===201);
+          r=await req('POST','/api/diapers/'+bid,{type:'pee',changed_at:'2026-07-21T09:00:00Z'},tk);c('diaper',r.s===201);
+          r=await req('POST','/api/sleep/'+bid,{start_time:'2026-07-21T20:00:00Z',end_time:'2026-07-21T22:00:00Z'},tk);c('sleep',r.s===201);
+          r=await req('GET','/api/stats/feedings/'+bid+'?days=7',null,tk);c('stats',r.s===200);
+          r=await req('GET','/api/reports/'+bid+'?days=7',null,tk);c('report',r.s===200);
+          r=await req('GET','/api/activity/'+bid+'?days=7',null,tk);c('activity',r.s===200);
+          console.log('Tests: '+p+' passed, '+f+' failed');
+          process.exit(f>0?1:0)},2000);
+          "

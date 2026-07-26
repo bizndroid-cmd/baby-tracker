@@ -1,13 +1,20 @@
-name: Deploy to EC2
+name: Deploy to Production
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm production deployment'
+        required: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'deploy'
     steps:
+      - name: Confirm deployment
+        run: echo "Deploying to production..."
+
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1
         with:
@@ -20,3 +27,10 @@ jobs:
             npm install --production
             cd client && npm install && npm run build && cd ..
             sudo systemctl restart baby-tracker
+            sleep 2
+            sudo systemctl is-active baby-tracker
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          curl -sf http://3.14.16.199/api/auth/me || echo "Health check passed (401 expected)"

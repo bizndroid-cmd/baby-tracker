@@ -9,6 +9,10 @@ let bot;
 function startBot() {
   bot = new TelegramBot(TOKEN, { polling: true });
 
+  // Initialize reminders system
+  const reminders = require('./reminders');
+  reminders.init(bot);
+
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = (msg.text || '').trim();
@@ -54,6 +58,9 @@ async function handleMessage(chatId, text) {
   if (text === '/undo') return handleUndo(chatId);
   if (text.startsWith('/switch')) return handleSwitch(chatId, text);
   if (text === '/quick') return sendQuickButtons(chatId);
+  if (text.startsWith('/remind')) return handleRemind(chatId, text);
+  if (text === '/reminders') return handleListReminders(chatId);
+  if (text.startsWith('/notify')) return handleNotifyMode(chatId, text);
 
   // Parse natural language entry
   const link = getLink(chatId);
@@ -109,6 +116,7 @@ function sendHelp(chatId) {
     `🧷 *Diaper:*\n• pee / poop / both\n• wet / dirty / mixed\n\n` +
     `😴 *Sleep:*\n• sleep 2h / nap 45m\n• slept 1h 30m\n• nap from 2pm to 3:30pm\n\n` +
     `📊 *Info:*\n• /summary — today's totals\n• /last — last 5 entries\n• /undo — delete last entry\n\n` +
+    `⏰ *Reminders:*\n• /remind feed 2.5h — one-time\n• /remind feed every 2.5h — recurring\n• /remind pump every 3h\n• /remind off — cancel all\n• /reminders — list active\n• /notify telegram — message (free)\n• /notify call +1234567890 — voice (premium)\n\n` +
     `⚙️ *Settings:*\n• /link email — connect account\n• /switch babyname — switch active baby\n• /baby — show active baby\n• /quick — quick log buttons`,
     { parse_mode: 'Markdown' }
   );
@@ -283,6 +291,96 @@ function handleUndo(chatId) {
   else if (last.cat === 'sleep') db.prepare('DELETE FROM sleep WHERE id = ?').run(last.id);
 
   bot.sendMessage(chatId, `🗑️ Removed last ${last.cat} entry.`);
+}
+
+// === REMINDER COMMANDS ===
+
+function handleRemind(chatId, text) {
+  const link = getLink(chatId);
+  if (!link) return bot.sendMessage(chatId, '❌ Not linked.');
+  const baby = getActiveBaby(link.user_id, link.active_baby_id);
+  if (!baby) return bot.sendMessage(chatId, '❌ No baby.');
+
+  const reminders = require('./reminders');
+  const cmd = text.replace('/remind', '').trim().toLowerCase();
+
+  // /remind off [type]
+  if (cmd === 'off' || cmd.startsWith('off')) {
+    const type = cmd.replace('off', '').trim() || null;
+    const count = reminders.cancelReminders(chatId, type);
+    return bot.sendMessage(chatId, count > 0 ? `🔕 Cancelled ${count} reminder(s).` : '📭 No active reminders to cancel.');
+  }
+
+  // /remind feed 2.5h / /remind pump 3h / /remind diaper 2h
+  const match = cmd.match(/^(feed|pump|diaper)\s+(?:every\s+)?(\d+\.?\d*)\s*(h|hr|hours?|m|min|minutes?)?/);
+  if (!match) {
+    return bot.sendMessage(chatId,
+      '❓ Usage:\n' +
+      '• /remind feed 2.5h — one-time\n' +
+      '• /remind feed every 2.5h — recurring\n' +
+      '• /remind pump 3h\n' +
+      '• /remind diaper 2h\n' +
+      '• /remind off — cancel all\n' +
+      '• /reminders — list active'
+    );
+  }
+
+  const type = match[1];
+  const amount = parseFloat(match[2]);
+  const unit = (match[3] || 'h').charAt(0);
+  const intervalMinutes = unit === 'h' ? Math.round(amount * 60) : Math.round(amount);
+  const recurring = cmd.includes('every');
+
+  reminders.createReminder({
+    chatId, userId: link.user_id, babyId: baby.id,
+    type, intervalMinutes, recurring,
+    phone: null, notifyMode: 'telegram',
+  });
+
+  const label = recurring ? `🔔 Recurring: ${type} every ${formatIntervalShort(intervalMinutes)}` : `🔔 Reminder: ${type} in ${formatIntervalShort(intervalMinutes)}`;
+  bot.sendMessage(chatId, `${label}\n\nCancel: /remind off`);
+}
+
+function handleListReminders(chatId) {
+  const reminders = require('./reminders');
+  const active = reminders.getActiveReminders(chatId);
+  if (!active.length) return bot.sendMessage(chatId, '📭 No active reminders.');
+
+  let msg = '🔔 *Active Reminders:*\n\n';
+  active.forEach((r, i) => {
+    const next = new Date(r.next_fire).toLocaleString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const mode = r.notify_mode === 'call' ? '📞' : '💬';
+    msg += `${i + 1}. ${mode} ${r.type} — every ${formatIntervalShort(r.interval_minutes)}${r.recurring ? ' (recurring)' : ''}\n   Next: ${next}\n`;
+  });
+  msg += '\nCancel: /remind off';
+  bot.sendMessage(chatId, msg, { parse_mode: 'Markdown' });
+}
+
+function handleNotifyMode(chatId, text) {
+  const reminders = require('./reminders');
+  const cmd = text.replace('/notify', '').trim().toLowerCase();
+
+  if (cmd.startsWith('call')) {
+    const phone = cmd.replace('call', '').trim();
+    if (!phone || phone.length < 10) {
+      return bot.sendMessage(chatId, '❌ Usage: /notify call +1234567890\n\nRequires Twilio setup. Contact admin.');
+    }
+    reminders.setNotifyMode(chatId, 'call', phone);
+    bot.sendMessage(chatId, `📞 Reminder mode: Voice Call to ${phone}\n\n⚠️ Requires Twilio activation. Contact admin if calls not working.`);
+  } else if (cmd === 'telegram' || cmd === 'text' || cmd === 'message') {
+    reminders.setNotifyMode(chatId, 'telegram', null);
+    bot.sendMessage(chatId, '💬 Reminder mode: Telegram message (default)');
+  } else {
+    bot.sendMessage(chatId, '❓ Usage:\n• /notify telegram — message reminders (free)\n• /notify call +1234567890 — voice call reminders (premium)');
+  }
+}
+
+function formatIntervalShort(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 // === HELPERS ===

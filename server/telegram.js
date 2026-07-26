@@ -247,9 +247,9 @@ function handleLast(chatId) {
   const baby = getActiveBaby(link.user_id, link.active_baby_id);
   if (!baby) return bot.sendMessage(chatId, '❌ No baby.');
 
-  const feedings = db.prepare('SELECT *, "feeding" as cat FROM feedings WHERE baby_id = ? ORDER BY fed_at DESC LIMIT 3').all(baby.id);
-  const diapers = db.prepare('SELECT *, "diaper" as cat FROM diapers WHERE baby_id = ? ORDER BY changed_at DESC LIMIT 3').all(baby.id);
-  const sleeps = db.prepare('SELECT *, "sleep" as cat FROM sleep WHERE baby_id = ? ORDER BY start_time DESC LIMIT 3').all(baby.id);
+  const feedings = db.prepare("SELECT *, 'feeding' as cat FROM feedings WHERE baby_id = ? ORDER BY fed_at DESC LIMIT 3").all(baby.id);
+  const diapers = db.prepare("SELECT *, 'diaper' as cat FROM diapers WHERE baby_id = ? ORDER BY changed_at DESC LIMIT 3").all(baby.id);
+  const sleeps = db.prepare("SELECT *, 'sleep' as cat FROM sleep WHERE baby_id = ? ORDER BY start_time DESC LIMIT 3").all(baby.id);
 
   const all = [
     ...feedings.map(f => ({ time: f.fed_at, label: formatFeedingLabel(f), cat: 'feeding', id: f.id })),
@@ -275,9 +275,9 @@ function handleUndo(chatId) {
   if (!baby) return bot.sendMessage(chatId, '❌ No baby.');
 
   // Find most recent entry across all tables
-  const lastFeed = db.prepare('SELECT id, fed_at as time, "feeding" as cat FROM feedings WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1').get(baby.id, link.user_id);
-  const lastDiaper = db.prepare('SELECT id, changed_at as time, "diaper" as cat FROM diapers WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1').get(baby.id, link.user_id);
-  const lastSleep = db.prepare('SELECT id, start_time as time, "sleep" as cat FROM sleep WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1').get(baby.id, link.user_id);
+  const lastFeed = db.prepare("SELECT id, fed_at as time, 'feeding' as cat FROM feedings WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1").get(baby.id, link.user_id);
+  const lastDiaper = db.prepare("SELECT id, changed_at as time, 'diaper' as cat FROM diapers WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1").get(baby.id, link.user_id);
+  const lastSleep = db.prepare("SELECT id, start_time as time, 'sleep' as cat FROM sleep WHERE baby_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1").get(baby.id, link.user_id);
 
   const candidates = [lastFeed, lastDiaper, lastSleep].filter(Boolean);
   if (!candidates.length) return bot.sendMessage(chatId, '📭 Nothing to undo.');

@@ -76,4 +76,11 @@ db.exec(`
   );
 `);
 
+// Migration: add active_baby_id column if missing (existing DBs)
+try {
+  db.prepare("SELECT active_baby_id FROM telegram_links LIMIT 1").get();
+} catch {
+  try { db.exec("ALTER TABLE telegram_links ADD COLUMN active_baby_id TEXT"); } catch {}
+}
+
 module.exports = db;

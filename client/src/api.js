@@ -85,6 +85,14 @@ export async function deleteBaby(id) {
   });
 }
 
+export async function updateBaby(id, data) {
+  return request(`${API_BASE}/babies/${id}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
 // Feedings
 export async function getFeedings(babyId) {
   return request(`${API_BASE}/feedings/${babyId}`, { headers: authHeaders() });

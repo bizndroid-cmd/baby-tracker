@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getBabies, createBaby, deleteBaby } from '../api';
+import { getBabies, createBaby } from '../api';
 import FeedingPanel from '../components/FeedingPanel';
 import DiaperPanel from '../components/DiaperPanel';
 import SleepPanel from '../components/SleepPanel';
 import StatsPanel from '../components/StatsPanel';
+import ManageProfiles from '../components/ManageProfiles';
 import Modal from '../components/Modal';
 
 const TABS = [
-  { id: 'dashboard', label: '📊 Dashboard', path: '/dashboard' },
-  { id: 'feeding', label: '🍼 Feeding', path: '/feeding' },
-  { id: 'diaper', label: '🧷 Diaper', path: '/diaper' },
-  { id: 'sleep', label: '😴 Sleep', path: '/sleep' },
+  { id: 'dashboard', label: '📊 Dashboard' },
+  { id: 'feeding', label: '🍼 Feeding' },
+  { id: 'diaper', label: '🧷 Diaper' },
+  { id: 'sleep', label: '😴 Sleep' },
+  { id: 'profiles', label: '⚙️ Profiles' },
 ];
 
 export default function Dashboard({ user, onLogout }) {
@@ -30,7 +32,6 @@ export default function Dashboard({ user, onLogout }) {
     loadBabies();
   }, []);
 
-  // Redirect root to /feeding
   useEffect(() => {
     if (!tab) navigate('/dashboard', { replace: true });
   }, [tab]);
@@ -63,6 +64,19 @@ export default function Dashboard({ user, onLogout }) {
     }
   };
 
+  const handleProfileUpdate = (updated) => {
+    setBabies(babies.map((b) => (b.id === updated.id ? updated : b)));
+    if (selectedBaby?.id === updated.id) setSelectedBaby(updated);
+  };
+
+  const handleProfileDelete = (id) => {
+    const remaining = babies.filter((b) => b.id !== id);
+    setBabies(remaining);
+    if (selectedBaby?.id === id) {
+      setSelectedBaby(remaining[0] || null);
+    }
+  };
+
   const switchTab = (tabId) => {
     navigate(`/${tabId}`);
   };
@@ -73,9 +87,6 @@ export default function Dashboard({ user, onLogout }) {
       <nav className="nav">
         <div className="nav-left">
           <h1>🍼 Baby Tracker</h1>
-          {selectedBaby && (
-            <span className="nav-baby-name">{selectedBaby.name}</span>
-          )}
         </div>
         <div className="nav-actions">
           {babies.length > 1 && (
@@ -123,10 +134,17 @@ export default function Dashboard({ user, onLogout }) {
           </div>
 
           {/* Panels */}
+          {activeTab === 'dashboard' && <StatsPanel babyId={selectedBaby.id} />}
           {activeTab === 'feeding' && <FeedingPanel babyId={selectedBaby.id} />}
           {activeTab === 'diaper' && <DiaperPanel babyId={selectedBaby.id} />}
           {activeTab === 'sleep' && <SleepPanel babyId={selectedBaby.id} />}
-          {activeTab === 'dashboard' && <StatsPanel babyId={selectedBaby.id} />}
+          {activeTab === 'profiles' && (
+            <ManageProfiles
+              babies={babies}
+              onUpdate={handleProfileUpdate}
+              onDelete={handleProfileDelete}
+            />
+          )}
         </div>
       )}
 
@@ -140,6 +158,13 @@ export default function Dashboard({ user, onLogout }) {
               + Add Your Baby
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Show profiles tab even without baby selected */}
+      {babies.length === 0 && activeTab === 'profiles' && (
+        <div className="container">
+          <ManageProfiles babies={babies} onUpdate={handleProfileUpdate} onDelete={handleProfileDelete} />
         </div>
       )}
 

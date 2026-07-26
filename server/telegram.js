@@ -426,8 +426,9 @@ function parseAndSave(text, userId, babyId) {
   const feedResult = tryParseFeed(lower);
   if (feedResult) {
     const id = uuidv4();
+    const timestamp = feedResult.time || new Date().toISOString();
     db.prepare('INSERT INTO feedings (id, baby_id, user_id, type, duration_minutes, quantity_ml, quantity_oz, side, fed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, babyId, userId, feedResult.type, feedResult.duration || null, feedResult.ml || null, feedResult.oz || null, feedResult.side || null, feedResult.time || new Date().toISOString()
+      id, babyId, userId, feedResult.type, feedResult.duration || null, feedResult.ml || null, feedResult.oz || null, feedResult.side || null, timestamp
     );
     return feedResult.label;
   }
@@ -467,6 +468,9 @@ function parseAndSave(text, userId, babyId) {
 }
 
 function tryParseFeed(text) {
+  // Extract optional time ("at 4pm", "at 2:30pm")
+  const parsedTime = extractTime(text);
+
   // Breastfeed patterns
   const bfPatterns = [
     /(?:bf|breast|breastfe[ed]|nursed?|nursing)\s*(?:for\s*)?(\d+)\s*(?:min|minutes?|m)?\s*(left|right|both)?/,
@@ -478,13 +482,14 @@ function tryParseFeed(text) {
     if (m) {
       const mins = parseInt(m[1]);
       const side = m[2] || extractSide(text);
-      return { type: 'breast', duration: mins, side, label: `🤱 Breastfeed ${mins} min${side ? ' (' + side + ')' : ''} logged` };
+      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      return { type: 'breast', duration: mins, side, time: parsedTime, label: `🤱 Breastfeed ${mins} min${side ? ' (' + side + ')' : ''}${timeLabel} logged` };
     }
   }
   // Simple "bf" without duration defaults to 15
   if (/^(bf|breastfed|nursed|nursing)\s*(left|right|both)?$/.test(text)) {
     const side = text.match(/(left|right|both)/)?.[1] || null;
-    return { type: 'breast', duration: 15, side, label: `🤱 Breastfeed 15 min${side ? ' (' + side + ')' : ''} logged (default 15min)` };
+    return { type: 'breast', duration: 15, side, time: parsedTime, label: `🤱 Breastfeed 15 min${side ? ' (' + side + ')' : ''} logged (default 15min)` };
   }
 
   // Formula patterns
@@ -499,7 +504,8 @@ function tryParseFeed(text) {
     if (m && (text.includes('formula') || text.includes('form'))) {
       const qty = parseFloat(m[1]);
       const unit = m[2];
-      return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, label: `🧴 Formula ${qty}${unit} logged` };
+      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🧴 Formula ${qty}${unit}${timeLabel} logged` };
     }
   }
 
@@ -513,7 +519,8 @@ function tryParseFeed(text) {
     if (m) {
       const qty = parseFloat(m[1]);
       const unit = m[2];
-      return { type: 'pumped', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, label: `🍼 Pumped ${qty}${unit} logged` };
+      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      return { type: 'pumped', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🍼 Pumped ${qty}${unit}${timeLabel} logged` };
     }
   }
 
@@ -522,7 +529,8 @@ function tryParseFeed(text) {
   if (genericBottle) {
     const qty = parseFloat(genericBottle[1]);
     const unit = genericBottle[2];
-    return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, label: `🧴 Formula ${qty}${unit} logged` };
+    const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+    return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🧴 Formula ${qty}${unit}${timeLabel} logged` };
   }
 
   return null;
@@ -533,6 +541,30 @@ function extractSide(text) {
   if (text.includes('right')) return 'right';
   if (text.includes('both')) return 'both';
   return null;
+}
+
+function extractTime(text) {
+  // Match "at 4pm", "at 4:30pm", "at 14:00", "at 2:30 pm", "@ 4pm"
+  const timeMatch = text.match(/(?:at|@)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
+  if (!timeMatch) return null;
+
+  let hours = parseInt(timeMatch[1]);
+  const minutes = parseInt(timeMatch[2] || 0);
+  const ampm = (timeMatch[3] || '').toLowerCase();
+
+  if (ampm === 'pm' && hours < 12) hours += 12;
+  if (ampm === 'am' && hours === 12) hours = 0;
+
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hours, minutes, 0, 0);
+
+  // If time is in future (unlikely for logging), assume yesterday
+  if (target > now) {
+    target.setDate(target.getDate() - 1);
+  }
+
+  return target.toISOString();
 }
 
 function tryParseDiaper(text) {

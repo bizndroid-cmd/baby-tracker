@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getDiapers, addDiaper, deleteDiaper } from '../api';
+import { getDiapers, addDiaper, deleteDiaper, updateDiaper } from '../api';
+import Modal from './Modal';
 
 function getCurrentDateTime() {
   const now = new Date();
@@ -16,6 +17,13 @@ export default function DiaperPanel({ babyId }) {
   const [changedAt, setChangedAt] = useState(getCurrentDateTime());
   const [error, setError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // Edit state
+  const [editingDiaper, setEditingDiaper] = useState(null);
+  const [editType, setEditType] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editChangedAt, setEditChangedAt] = useState('');
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
     loadDiapers();
@@ -61,6 +69,33 @@ export default function DiaperPanel({ babyId }) {
       setConfirmDeleteId(null);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const startEdit = (d) => {
+    setEditingDiaper(d);
+    setEditType(d.type);
+    setEditNotes(d.notes || '');
+    const date = new Date(d.changed_at);
+    const offset = date.getTimezoneOffset();
+    const local = new Date(date.getTime() - offset * 60000);
+    setEditChangedAt(local.toISOString().slice(0, 16));
+    setEditError('');
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setEditError('');
+    try {
+      const updated = await updateDiaper(babyId, editingDiaper.id, {
+        type: editType,
+        notes: editNotes || null,
+        changed_at: new Date(editChangedAt).toISOString(),
+      });
+      setDiapers(diapers.map((d) => (d.id === updated.id ? updated : d)));
+      setEditingDiaper(null);
+    } catch (err) {
+      setEditError(err.message);
     }
   };
 
@@ -150,6 +185,7 @@ export default function DiaperPanel({ babyId }) {
                 <p>{formatTime(d.changed_at)}{d.notes ? ` — ${d.notes}` : ''}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button className="btn-outline btn-sm" onClick={() => startEdit(d)}>Edit</button>
                 {confirmDeleteId === d.id ? (
                   <>
                     <button className="btn-danger btn-sm" onClick={() => handleDelete(d.id)}>
@@ -169,6 +205,38 @@ export default function DiaperPanel({ babyId }) {
           ))
         )}
       </div>
+
+      {/* Edit Modal */}
+      <Modal open={!!editingDiaper} onClose={() => setEditingDiaper(null)} title="Edit Diaper Change">
+        {editingDiaper && (
+          <form onSubmit={handleSaveEdit}>
+            <div className="form-group">
+              <label>Date & Time</label>
+              <input type="datetime-local" value={editChangedAt} onChange={(e) => setEditChangedAt(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Type</label>
+              <div className="radio-group">
+                {['pee', 'poop', 'both'].map((t) => (
+                  <label key={t} className="radio-option">
+                    <input type="radio" name="edit-diaper-type" value={t} checked={editType === t} onChange={() => setEditType(t)} />
+                    {t === 'pee' ? '💧 Pee' : t === 'poop' ? '💩 Poop' : '💧💩 Both'}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <input type="text" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="Any notes..." />
+            </div>
+            {editError && <p className="error-msg">{editError}</p>}
+            <div className="form-actions">
+              <button type="submit" className="btn-success">Save</button>
+              <button type="button" className="btn-secondary" onClick={() => setEditingDiaper(null)}>Cancel</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

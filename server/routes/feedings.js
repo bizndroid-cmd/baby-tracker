@@ -66,6 +66,44 @@ router.post('/:babyId', (req, res) => {
   }
 });
 
+// Update a feeding
+router.put('/:babyId/:feedingId', (req, res) => {
+  try {
+    const { type, duration_minutes, quantity_ml, quantity_oz, side, notes, fed_at } = req.body;
+
+    const feeding = db.prepare('SELECT * FROM feedings WHERE id = ? AND baby_id = ? AND user_id = ?').get(
+      req.params.feedingId, req.params.babyId, req.user.id
+    );
+    if (!feeding) {
+      return res.status(404).json({ error: 'Feeding not found' });
+    }
+
+    const newType = type || feeding.type;
+    if (!['breast', 'pumped', 'formula'].includes(newType)) {
+      return res.status(400).json({ error: 'Valid feeding type is required' });
+    }
+
+    db.prepare(`
+      UPDATE feedings SET type = ?, duration_minutes = ?, quantity_ml = ?, quantity_oz = ?, side = ?, notes = ?, fed_at = ?
+      WHERE id = ?
+    `).run(
+      newType,
+      duration_minutes !== undefined ? duration_minutes : feeding.duration_minutes,
+      quantity_ml !== undefined ? quantity_ml : feeding.quantity_ml,
+      quantity_oz !== undefined ? quantity_oz : feeding.quantity_oz,
+      side !== undefined ? side : feeding.side,
+      notes !== undefined ? notes : feeding.notes,
+      fed_at || feeding.fed_at,
+      req.params.feedingId
+    );
+
+    const updated = db.prepare('SELECT * FROM feedings WHERE id = ?').get(req.params.feedingId);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update feeding' });
+  }
+});
+
 // Delete a feeding
 router.delete('/:babyId/:feedingId', (req, res) => {
   try {

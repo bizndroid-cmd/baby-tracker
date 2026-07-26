@@ -113,6 +113,14 @@ export async function deleteFeeding(babyId, feedingId) {
   });
 }
 
+export async function updateFeeding(babyId, feedingId, data) {
+  return request(`${API_BASE}/feedings/${babyId}/${feedingId}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
+  });
+}
+
 // Diapers
 export async function getDiapers(babyId) {
   return request(`${API_BASE}/diapers/${babyId}`, { headers: authHeaders() });
@@ -130,6 +138,14 @@ export async function deleteDiaper(babyId, diaperId) {
   return request(`${API_BASE}/diapers/${babyId}/${diaperId}`, {
     method: 'DELETE',
     headers: authHeaders(),
+  });
+}
+
+export async function updateDiaper(babyId, diaperId, data) {
+  return request(`${API_BASE}/diapers/${babyId}/${diaperId}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(data),
   });
 }
 

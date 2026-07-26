@@ -58,6 +58,37 @@ router.post('/:babyId', (req, res) => {
   }
 });
 
+// Update a diaper change
+router.put('/:babyId/:diaperId', (req, res) => {
+  try {
+    const { type, notes, changed_at } = req.body;
+
+    const diaper = db.prepare('SELECT * FROM diapers WHERE id = ? AND baby_id = ? AND user_id = ?').get(
+      req.params.diaperId, req.params.babyId, req.user.id
+    );
+    if (!diaper) {
+      return res.status(404).json({ error: 'Diaper record not found' });
+    }
+
+    const newType = type || diaper.type;
+    if (!['pee', 'poop', 'both'].includes(newType)) {
+      return res.status(400).json({ error: 'Valid diaper type is required' });
+    }
+
+    db.prepare('UPDATE diapers SET type = ?, notes = ?, changed_at = ? WHERE id = ?').run(
+      newType,
+      notes !== undefined ? notes : diaper.notes,
+      changed_at || diaper.changed_at,
+      req.params.diaperId
+    );
+
+    const updated = db.prepare('SELECT * FROM diapers WHERE id = ?').get(req.params.diaperId);
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update diaper record' });
+  }
+});
+
 // Delete a diaper change
 router.delete('/:babyId/:diaperId', (req, res) => {
   try {

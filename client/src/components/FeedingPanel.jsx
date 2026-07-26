@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getFeedings, addFeeding, deleteFeeding } from '../api';
+import { getFeedings, addFeeding, deleteFeeding, updateFeeding } from '../api';
+import Modal from './Modal';
 
 function getCurrentDateTime() {
   const now = new Date();
@@ -13,6 +14,17 @@ export default function FeedingPanel({ babyId }) {
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+
+  // Edit state
+  const [editingFeeding, setEditingFeeding] = useState(null);
+  const [editType, setEditType] = useState('');
+  const [editDuration, setEditDuration] = useState('');
+  const [editMl, setEditMl] = useState('');
+  const [editOz, setEditOz] = useState('');
+  const [editSide, setEditSide] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editFedAt, setEditFedAt] = useState('');
+  const [editError, setEditError] = useState('');
 
   // Form fields
   const [fedAt, setFedAt] = useState(getCurrentDateTime());
@@ -118,6 +130,43 @@ export default function FeedingPanel({ babyId }) {
       setConfirmDeleteId(null);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const startEdit = (f) => {
+    setEditingFeeding(f);
+    setEditType(f.type);
+    setEditDuration(f.duration_minutes || '');
+    setEditMl(f.quantity_ml || '');
+    setEditOz(f.quantity_oz || '');
+    setEditSide(f.side || '');
+    setEditNotes(f.notes || '');
+    // Convert ISO to datetime-local format
+    const d = new Date(f.fed_at);
+    const offset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - offset * 60000);
+    setEditFedAt(local.toISOString().slice(0, 16));
+    setEditError('');
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setEditError('');
+    try {
+      const data = {
+        type: editType,
+        fed_at: new Date(editFedAt).toISOString(),
+        notes: editNotes || null,
+        duration_minutes: editType === 'breast' ? parseInt(editDuration) || null : null,
+        quantity_ml: (editType === 'pumped' || editType === 'formula') ? parseFloat(editMl) || null : null,
+        quantity_oz: (editType === 'pumped' || editType === 'formula') ? parseFloat(editOz) || null : null,
+        side: editType === 'breast' ? editSide || null : null,
+      };
+      const updated = await updateFeeding(babyId, editingFeeding.id, data);
+      setFeedings(feedings.map((f) => (f.id === updated.id ? updated : f)));
+      setEditingFeeding(null);
+    } catch (err) {
+      setEditError(err.message);
     }
   };
 
@@ -341,6 +390,7 @@ export default function FeedingPanel({ babyId }) {
                 <p>{formatTime(f.fed_at)}</p>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button className="btn-outline btn-sm" onClick={() => startEdit(f)}>Edit</button>
                 {confirmDeleteId === f.id ? (
                   <>
                     <button className="btn-danger btn-sm" onClick={() => handleDelete(f.id)}>
@@ -360,6 +410,64 @@ export default function FeedingPanel({ babyId }) {
           ))
         )}
       </div>
+
+      {/* Edit Modal */}
+      <Modal open={!!editingFeeding} onClose={() => setEditingFeeding(null)} title="Edit Feeding">
+        {editingFeeding && (
+          <form onSubmit={handleSaveEdit}>
+            <div className="form-group">
+              <label>Date & Time</label>
+              <input type="datetime-local" value={editFedAt} onChange={(e) => setEditFedAt(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Type</label>
+              <select value={editType} onChange={(e) => setEditType(e.target.value)}>
+                <option value="breast">Breastfeed</option>
+                <option value="pumped">Pumped</option>
+                <option value="formula">Formula</option>
+              </select>
+            </div>
+            {editType === 'breast' && (
+              <>
+                <div className="form-group">
+                  <label>Duration (minutes)</label>
+                  <input type="number" min="1" value={editDuration} onChange={(e) => setEditDuration(e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label>Side</label>
+                  <select value={editSide} onChange={(e) => setEditSide(e.target.value)}>
+                    <option value="">None</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                    <option value="both">Both</option>
+                  </select>
+                </div>
+              </>
+            )}
+            {(editType === 'pumped' || editType === 'formula') && (
+              <>
+                <div className="form-group">
+                  <label>Quantity (ml)</label>
+                  <input type="number" min="0" step="0.1" value={editMl} onChange={(e) => { setEditMl(e.target.value); if (e.target.value) setEditOz((parseFloat(e.target.value)/29.5735).toFixed(1)); else setEditOz(''); }} />
+                </div>
+                <div className="form-group">
+                  <label>Quantity (oz)</label>
+                  <input type="number" min="0" step="0.1" value={editOz} onChange={(e) => { setEditOz(e.target.value); if (e.target.value) setEditMl((parseFloat(e.target.value)*29.5735).toFixed(0)); else setEditMl(''); }} />
+                </div>
+              </>
+            )}
+            <div className="form-group">
+              <label>Notes</label>
+              <input type="text" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+            </div>
+            {editError && <p className="error-msg">{editError}</p>}
+            <div className="form-actions">
+              <button type="submit" className="btn-success">Save</button>
+              <button type="button" className="btn-secondary" onClick={() => setEditingFeeding(null)}>Cancel</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

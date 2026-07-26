@@ -9,6 +9,7 @@ const diaperRoutes = require('./routes/diapers');
 const sleepRoutes = require('./routes/sleep');
 const statsRoutes = require('./routes/stats');
 const reportRoutes = require('./routes/reports');
+const activityRoutes = require('./routes/activity');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -24,6 +25,7 @@ app.use('/api/diapers', diaperRoutes);
 app.use('/api/sleep', sleepRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/activity', activityRoutes);
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {

@@ -202,6 +202,13 @@ export async function deleteSleepRecord(babyId, sleepId) {
   });
 }
 
+// Activity
+export async function getActivity(babyId, { days } = {}) {
+  const params = new URLSearchParams();
+  if (days) params.set('days', days);
+  return request(`${API_BASE}/activity/${babyId}?${params}`, { headers: authHeaders() });
+}
+
 // Reports
 export async function downloadReport(babyId, { days } = {}) {
   const params = new URLSearchParams();

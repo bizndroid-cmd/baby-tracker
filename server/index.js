@@ -37,6 +37,10 @@ if (process.env.NODE_ENV === 'production') {
 
 const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1';
 
+// Start Telegram bot
+const { startBot } = require('./telegram');
+startBot();
+
 const server = app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
 });

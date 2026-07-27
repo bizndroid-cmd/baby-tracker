@@ -8,7 +8,12 @@
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8818617776:AAH1ToNqkXSaq2gY-msGbd44zyYogRswO94';
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+if (!TOKEN) {
+  console.log('TELEGRAM_BOT_TOKEN not set. Cannot send notifications.');
+  process.exit(1);
+}
 
 async function notifyUsers(message) {
   const bot = new TelegramBot(TOKEN);

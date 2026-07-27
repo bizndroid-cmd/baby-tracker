@@ -8,8 +8,13 @@ const TelegramBot = require('node-telegram-bot-api');
 const path = require('path');
 const fs = require('fs');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8818617776:AAH1ToNqkXSaq2gY-msGbd44zyYogRswO94';
-const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID || '6787072356';
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const ADMIN_CHAT_ID = process.env.ADMIN_CHAT_ID;
+
+if (!TOKEN || !ADMIN_CHAT_ID) {
+  console.log('TELEGRAM_BOT_TOKEN or ADMIN_CHAT_ID not set. Backup skipped.');
+  process.exit(0);
+}
 const DB_PATH = path.join(__dirname, '../data/baby-tracker.db');
 
 async function backup() {

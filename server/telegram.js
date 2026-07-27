@@ -3,7 +3,13 @@ const db = require('./db');
 const { v4: uuidv4 } = require('uuid');
 const tz = require('./timezone');
 
-const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8818617776:AAH1ToNqkXSaq2gY-msGbd44zyYogRswO94';
+const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+
+if (!TOKEN) {
+  console.log('TELEGRAM_BOT_TOKEN not set. Bot disabled.');
+  module.exports = { startBot: () => {} };
+  return;
+}
 
 let bot;
 

@@ -43,6 +43,8 @@ jobs:
         run: cd client && npm run build
 
       - name: Run API tests
+        env:
+          JWT_SECRET: test-secret-for-ci
         run: |
           node -e "
           const http = require('http');

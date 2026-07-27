@@ -6,6 +6,9 @@ on:
       confirm:
         description: 'Type "deploy" to confirm production deployment'
         required: true
+      release_notes:
+        description: 'Release notes to send to users (optional)'
+        required: false
 
 jobs:
   deploy:
@@ -34,3 +37,14 @@ jobs:
         run: |
           sleep 5
           curl -sf http://3.14.16.199/api/auth/me || echo "Health check passed (401 expected)"
+
+      - name: Notify users via Telegram
+        if: github.event.inputs.release_notes != ''
+        uses: appleboy/ssh-action@v1
+        with:
+          host: 3.14.16.199
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd baby-tracker
+            node server/notify-release.js "${{ github.event.inputs.release_notes }}"

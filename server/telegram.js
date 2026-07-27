@@ -1,6 +1,7 @@
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./db');
 const { v4: uuidv4 } = require('uuid');
+const tz = require('./timezone');
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN || '8818617776:AAH1ToNqkXSaq2gY-msGbd44zyYogRswO94';
 
@@ -206,7 +207,7 @@ function handleSummary(chatId) {
   const baby = getActiveBaby(link.user_id, link.active_baby_id);
   if (!baby) return bot.sendMessage(chatId, '❌ No baby.');
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = tz.today();
 
   const feeds = db.prepare(`SELECT type, COUNT(*) as count, SUM(duration_minutes) as mins, SUM(COALESCE(quantity_ml, quantity_oz*29.5735)) as ml FROM feedings WHERE baby_id = ? AND date(fed_at) = ? GROUP BY type`).all(baby.id, today);
   const diapers = db.prepare(`SELECT type, COUNT(*) as count FROM diapers WHERE baby_id = ? AND date(changed_at) = ? GROUP BY type`).all(baby.id, today);
@@ -426,7 +427,7 @@ function parseAndSave(text, userId, babyId) {
   const feedResult = tryParseFeed(lower);
   if (feedResult) {
     const id = uuidv4();
-    const timestamp = feedResult.time || new Date().toISOString();
+    const timestamp = feedResult.time || tz.now();
     db.prepare('INSERT INTO feedings (id, baby_id, user_id, type, duration_minutes, quantity_ml, quantity_oz, side, fed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
       id, babyId, userId, feedResult.type, feedResult.duration || null, feedResult.ml || null, feedResult.oz || null, feedResult.side || null, timestamp
     );
@@ -437,7 +438,7 @@ function parseAndSave(text, userId, babyId) {
   const diaperResult = tryParseDiaper(lower);
   if (diaperResult) {
     const id = uuidv4();
-    const timestamp = diaperResult.time || new Date().toISOString();
+    const timestamp = diaperResult.time || tz.now();
     db.prepare('INSERT INTO diapers (id, baby_id, user_id, type, changed_at) VALUES (?, ?, ?, ?, ?)').run(
       id, babyId, userId, diaperResult.type, timestamp
     );
@@ -450,9 +451,11 @@ function parseAndSave(text, userId, babyId) {
     // End last in-progress sleep
     const openSleep = db.prepare('SELECT * FROM sleep WHERE baby_id = ? AND user_id = ? AND end_time IS NULL ORDER BY start_time DESC LIMIT 1').get(babyId, userId);
     if (!openSleep) return '❌ No active sleep session to end.';
-    const endTime = sleepResult.wakeTime ? new Date(sleepResult.wakeTime) : new Date();
-    const duration = Math.floor((endTime - new Date(openSleep.start_time)) / 60000);
-    db.prepare('UPDATE sleep SET end_time = ?, duration_minutes = ? WHERE id = ?').run(endTime.toISOString(), duration, openSleep.id);
+    const endTimeStr = sleepResult.wakeTime || tz.now();
+    const endDayjs = tz.dayjs(endTimeStr);
+    const startDayjs = tz.dayjs(openSleep.start_time);
+    const duration = endDayjs.diff(startDayjs, 'minute');
+    db.prepare('UPDATE sleep SET end_time = ?, duration_minutes = ? WHERE id = ?').run(endTimeStr, duration, openSleep.id);
     const h = Math.floor(duration / 60);
     const m = duration % 60;
     return `😴 Sleep ended — ${h > 0 ? h + 'h ' : ''}${m}m total`;
@@ -483,7 +486,7 @@ function tryParseFeed(text) {
     if (m) {
       const mins = parseInt(m[1]);
       const side = m[2] || extractSide(text);
-      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
       return { type: 'breast', duration: mins, side, time: parsedTime, label: `🤱 Breastfeed ${mins} min${side ? ' (' + side + ')' : ''}${timeLabel} logged` };
     }
   }
@@ -505,7 +508,7 @@ function tryParseFeed(text) {
     if (m && (text.includes('formula') || text.includes('form'))) {
       const qty = parseFloat(m[1]);
       const unit = m[2];
-      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
       return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🧴 Formula ${qty}${unit}${timeLabel} logged` };
     }
   }
@@ -520,7 +523,7 @@ function tryParseFeed(text) {
     if (m) {
       const qty = parseFloat(m[1]);
       const unit = m[2];
-      const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+      const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
       return { type: 'pumped', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🍼 Pumped ${qty}${unit}${timeLabel} logged` };
     }
   }
@@ -530,7 +533,7 @@ function tryParseFeed(text) {
   if (genericBottle) {
     const qty = parseFloat(genericBottle[1]);
     const unit = genericBottle[2];
-    const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+    const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
     return { type: 'formula', ml: unit === 'ml' ? qty : null, oz: unit === 'oz' ? qty : null, time: parsedTime, label: `🧴 Formula ${qty}${unit}${timeLabel} logged` };
   }
 
@@ -545,32 +548,12 @@ function extractSide(text) {
 }
 
 function extractTime(text) {
-  // Match "at 4pm", "at 4:30pm", "at 14:00", "at 2:30 pm", "@ 4pm"
-  const timeMatch = text.match(/(?:at|@)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/i);
-  if (!timeMatch) return null;
-
-  let hours = parseInt(timeMatch[1]);
-  const minutes = parseInt(timeMatch[2] || 0);
-  const ampm = (timeMatch[3] || '').toLowerCase();
-
-  if (ampm === 'pm' && hours < 12) hours += 12;
-  if (ampm === 'am' && hours === 12) hours = 0;
-
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(hours, minutes, 0, 0);
-
-  // If time is in future (unlikely for logging), assume yesterday
-  if (target > now) {
-    target.setDate(target.getDate() - 1);
-  }
-
-  return target.toISOString();
+  return tz.parseTimeOfDay(text);
 }
 
 function tryParseDiaper(text) {
   const parsedTime = extractTime(text);
-  const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+  const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
 
   if (/\b(pee\s*(and|&|\+)\s*poop|poop\s*(and|&|\+)\s*pee|both|mixed)\b/.test(text)) {
     return { type: 'both', time: parsedTime, label: `💧💩 Diaper (both)${timeLabel} logged` };
@@ -596,17 +579,25 @@ function tryParseSleep(text) {
     const endH = parseHour(fromTo[4], fromTo[6]);
     const endM = parseInt(fromTo[5] || 0);
 
-    const now = new Date();
-    const start = new Date(now); start.setHours(startH, startM, 0, 0);
-    const end = new Date(now); end.setHours(endH, endM, 0, 0);
+    const start = tz.parseHourToDate(fromTo[1], fromTo[2], fromTo[3]);
+    let end = tz.parseHourToDate(fromTo[4], fromTo[5], fromTo[6]);
 
-    if (end <= start) start.setDate(start.getDate() - 1);
+    if (end.isBefore(start) || end.isSame(start)) {
+      // end is next day or start was yesterday — adjust start back
+      const adjustedStart = start.subtract(1, 'day');
+      const duration = end.diff(adjustedStart, 'minute');
+      if (duration > 0 && duration <= 1440) {
+        const h = Math.floor(duration / 60);
+        const m = duration % 60;
+        return { start: adjustedStart.format('YYYY-MM-DDTHH:mm:ss'), end: end.format('YYYY-MM-DDTHH:mm:ss'), duration, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}logged` };
+      }
+    }
 
-    const duration = Math.floor((end - start) / 60000);
+    const duration = end.diff(start, 'minute');
     if (duration > 0 && duration <= 1440) {
       const h = Math.floor(duration / 60);
       const m = duration % 60;
-      return { start: start.toISOString(), end: end.toISOString(), duration, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}logged` };
+      return { start: start.format('YYYY-MM-DDTHH:mm:ss'), end: end.format('YYYY-MM-DDTHH:mm:ss'), duration, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}logged` };
     }
   }
 
@@ -618,27 +609,29 @@ function tryParseSleep(text) {
     const totalMinutes = hours * 60 + mins;
     if (totalMinutes > 0 && totalMinutes <= 1440) {
       const parsedTime = extractTime(text);
-      let endTime, startTime;
+      let endTimeStr, startTimeStr;
       if (parsedTime) {
-        // "slept 2h at 3pm" means ended at 3pm, started 2h before
-        endTime = new Date(parsedTime);
-        startTime = new Date(endTime.getTime() - totalMinutes * 60000);
+        const endDayjs = tz.dayjs(parsedTime);
+        const startDayjs = endDayjs.subtract(totalMinutes, 'minute');
+        endTimeStr = endDayjs.format('YYYY-MM-DDTHH:mm:ss');
+        startTimeStr = startDayjs.format('YYYY-MM-DDTHH:mm:ss');
       } else {
-        endTime = new Date();
-        startTime = new Date(endTime.getTime() - totalMinutes * 60000);
+        endTimeStr = tz.now();
+        const endDayjs = tz.dayjs(endTimeStr);
+        startTimeStr = endDayjs.subtract(totalMinutes, 'minute').format('YYYY-MM-DDTHH:mm:ss');
       }
       const h = Math.floor(totalMinutes / 60);
       const m = totalMinutes % 60;
-      const timeLabel = parsedTime ? ` (ended at ${endTime.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})})` : '';
-      return { start: startTime.toISOString(), end: endTime.toISOString(), duration: totalMinutes, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${timeLabel}logged` };
+      const timeLabel = parsedTime ? ` (ended at ${tz.formatForDisplay(endTimeStr)})` : '';
+      return { start: startTimeStr, end: endTimeStr, duration: totalMinutes, label: `😴 Sleep ${h > 0 ? h + 'h ' : ''}${m > 0 ? m + 'm ' : ''}${timeLabel}logged` };
     }
   }
 
   // Simple "sleep" or "nap" — optionally "at Xpm" to set start time
   if (/^(sleep|nap|sleeping|napping|asleep)\b/.test(text)) {
     const parsedTime = extractTime(text);
-    const startTime = parsedTime || new Date().toISOString();
-    const timeLabel = parsedTime ? ` at ${new Date(parsedTime).toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit'})}` : '';
+    const startTime = parsedTime || tz.now();
+    const timeLabel = parsedTime ? ` at ${tz.formatForDisplay(parsedTime)}` : '';
     return { start: startTime, end: null, duration: null, label: `😴 Sleep started${timeLabel} (send "woke" or "awake" to end)` };
   }
 

@@ -47,4 +47,5 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd baby-tracker
+            export $(grep Environment /etc/systemd/system/baby-tracker.service | sed 's/Environment=//' | xargs)
             node server/notify-release.js "${{ github.event.inputs.release_notes }}"

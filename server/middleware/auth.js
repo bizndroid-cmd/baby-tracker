@@ -1,7 +1,12 @@
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'baby-tracker-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable not set.');
+  process.exit(1);
+}
 
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];

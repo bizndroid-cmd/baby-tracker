@@ -79,10 +79,10 @@ router.post('/:babyId', (req, res) => {
   }
 });
 
-// Update sleep record (end an in-progress session)
+// Update sleep record (end an in-progress session or edit)
 router.patch('/:babyId/:sleepId', (req, res) => {
   try {
-    const { end_time } = req.body;
+    const { start_time, end_time, notes } = req.body;
 
     const record = db.prepare('SELECT * FROM sleep WHERE id = ? AND baby_id = ? AND user_id = ?').get(
       req.params.sleepId, req.params.babyId, req.user.id
@@ -92,24 +92,29 @@ router.patch('/:babyId/:sleepId', (req, res) => {
       return res.status(404).json({ error: 'Sleep record not found' });
     }
 
-    if (!end_time) {
-      return res.status(400).json({ error: 'End time is required' });
+    const newStart = start_time || record.start_time;
+    const newEnd = end_time !== undefined ? end_time : record.end_time;
+    const newNotes = notes !== undefined ? notes : record.notes;
+
+    let duration_minutes = null;
+    if (newEnd) {
+      const start = new Date(newStart);
+      const end = new Date(newEnd);
+
+      if (end <= start) {
+        return res.status(400).json({ error: 'End time must be after start time' });
+      }
+
+      duration_minutes = Math.floor((end - start) / 60000);
+
+      if (duration_minutes > 1440) {
+        return res.status(400).json({ error: 'Sleep session duration exceeds maximum allowed (24 hours)' });
+      }
     }
 
-    const start = new Date(record.start_time);
-    const end = new Date(end_time);
-
-    if (end <= start) {
-      return res.status(400).json({ error: 'End time must be after start time' });
-    }
-
-    const duration_minutes = Math.floor((end - start) / 60000);
-
-    if (duration_minutes > 1440) {
-      return res.status(400).json({ error: 'Sleep session duration exceeds maximum allowed (24 hours)' });
-    }
-
-    db.prepare('UPDATE sleep SET end_time = ?, duration_minutes = ? WHERE id = ?').run(end_time, duration_minutes, req.params.sleepId);
+    db.prepare('UPDATE sleep SET start_time = ?, end_time = ?, duration_minutes = ?, notes = ? WHERE id = ?').run(
+      newStart, newEnd, duration_minutes, newNotes, req.params.sleepId
+    );
 
     const updated = db.prepare('SELECT * FROM sleep WHERE id = ?').get(req.params.sleepId);
     res.json(updated);

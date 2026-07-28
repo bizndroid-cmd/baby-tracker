@@ -6,7 +6,7 @@ export default function StatsPanel({ babyId }) {
   const [diaperStats, setDiaperStats] = useState(null);
   const [sleepStats, setSleepStats] = useState(null);
   const [activity, setActivity] = useState([]);
-  const [days, setDays] = useState(7);
+  const [days, setDays] = useState(1);
   const [viewMode, setViewMode] = useState('daily'); // 'daily' | 'detailed'
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -150,9 +150,9 @@ export default function StatsPanel({ babyId }) {
     <div>
       {/* Period Filter */}
       <div className="filter-bar">
-        {[3, 7, 14, 30].map((d) => (
+        {[1, 3, 7, 14, 30].map((d) => (
           <button key={d} className={`filter-btn ${days === d ? 'active' : ''}`} onClick={() => setDays(d)}>
-            {d === 3 ? '3 Days' : d === 7 ? '1 Week' : d === 14 ? '2 Weeks' : '30 Days'}
+            {d === 1 ? 'Today' : d === 3 ? '3 Days' : d === 7 ? '1 Week' : d === 14 ? '2 Weeks' : '30 Days'}
           </button>
         ))}
       </div>

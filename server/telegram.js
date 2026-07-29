@@ -215,9 +215,9 @@ function handleSummary(chatId) {
 
   const today = tz.today();
 
-  const feeds = db.prepare(`SELECT type, COUNT(*) as count, SUM(duration_minutes) as mins, SUM(COALESCE(quantity_ml, quantity_oz*29.5735)) as ml FROM feedings WHERE baby_id = ? AND date(fed_at) = ? GROUP BY type`).all(baby.id, today);
-  const diapers = db.prepare(`SELECT type, COUNT(*) as count FROM diapers WHERE baby_id = ? AND date(changed_at) = ? GROUP BY type`).all(baby.id, today);
-  const sleeps = db.prepare(`SELECT COUNT(*) as count, SUM(duration_minutes) as mins FROM sleep WHERE baby_id = ? AND date(start_time) = ?`).get(baby.id, today);
+  const feeds = db.prepare(`SELECT type, COUNT(*) as count, SUM(duration_minutes) as mins, SUM(COALESCE(quantity_ml, quantity_oz*29.5735)) as ml FROM feedings WHERE baby_id = ? AND date(fed_at, 'localtime') = ? GROUP BY type`).all(baby.id, today);
+  const diapers = db.prepare(`SELECT type, COUNT(*) as count FROM diapers WHERE baby_id = ? AND date(changed_at, 'localtime') = ? GROUP BY type`).all(baby.id, today);
+  const sleeps = db.prepare(`SELECT COUNT(*) as count, SUM(duration_minutes) as mins FROM sleep WHERE baby_id = ? AND date(start_time, 'localtime') = ?`).get(baby.id, today);
 
   let msg = `📊 *${baby.name} — Today*\n\n`;
 

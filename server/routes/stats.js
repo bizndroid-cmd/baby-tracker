@@ -31,7 +31,7 @@ router.get('/feedings/:babyId', (req, res) => {
 
     const dailyStats = db.prepare(`
       SELECT 
-        date(fed_at) as date,
+        date(fed_at, 'localtime') as date,
         COUNT(*) as total_feeds,
         SUM(CASE WHEN type = 'breast' THEN 1 ELSE 0 END) as breast_count,
         SUM(CASE WHEN type = 'pumped' THEN 1 ELSE 0 END) as pumped_count,
@@ -40,8 +40,8 @@ router.get('/feedings/:babyId', (req, res) => {
         SUM(CASE WHEN type IN ('pumped', 'formula') THEN COALESCE(quantity_ml, quantity_oz * 29.5735) ELSE 0 END) as total_ml
       FROM feedings
       WHERE baby_id = ? AND user_id = ? ${dateFilter}
-      GROUP BY date(fed_at)
-      ORDER BY date(fed_at) DESC
+      GROUP BY date(fed_at, 'localtime')
+      ORDER BY date(fed_at, 'localtime') DESC
     `).all(...params);
 
     const numDays = dailyStats.length || 1;
@@ -98,13 +98,13 @@ router.get('/sleep/:babyId', (req, res) => {
 
     const dailyStats = db.prepare(`
       SELECT 
-        date(start_time) as date,
+        date(start_time, 'localtime') as date,
         COUNT(*) as session_count,
         SUM(CASE WHEN duration_minutes IS NOT NULL THEN duration_minutes ELSE 0 END) as total_minutes
       FROM sleep
       WHERE baby_id = ? AND user_id = ? ${dateFilter}
-      GROUP BY date(start_time)
-      ORDER BY date(start_time) DESC
+      GROUP BY date(start_time, 'localtime')
+      ORDER BY date(start_time, 'localtime') DESC
     `).all(...params);
 
     const numDays = dailyStats.length || 1;
@@ -155,15 +155,15 @@ router.get('/diapers/:babyId', (req, res) => {
 
     const dailyStats = db.prepare(`
       SELECT 
-        date(changed_at) as date,
+        date(changed_at, 'localtime') as date,
         COUNT(*) as total_changes,
         SUM(CASE WHEN type = 'pee' THEN 1 ELSE 0 END) as pee_count,
         SUM(CASE WHEN type = 'poop' THEN 1 ELSE 0 END) as poop_count,
         SUM(CASE WHEN type = 'both' THEN 1 ELSE 0 END) as both_count
       FROM diapers
       WHERE baby_id = ? AND user_id = ? ${dateFilter}
-      GROUP BY date(changed_at)
-      ORDER BY date(changed_at) DESC
+      GROUP BY date(changed_at, 'localtime')
+      ORDER BY date(changed_at, 'localtime') DESC
     `).all(...params);
 
     const numDays = dailyStats.length || 1;

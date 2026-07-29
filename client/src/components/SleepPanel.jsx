@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { getSleepRecords, addSleepRecord, updateSleepRecord, deleteSleepRecord } from '../api';
+import Modal from './Modal';
 
 function getCurrentDateTime() {
   const now = new Date();
   const offset = now.getTimezoneOffset();
   const local = new Date(now.getTime() - offset * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function toLocalInput(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
   return local.toISOString().slice(0, 16);
 }
 
@@ -26,6 +35,17 @@ export default function SleepPanel({ babyId }) {
   const [error, setError] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  // Edit state
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editError, setEditError] = useState('');
+
+  // End session with custom time
+  const [endingId, setEndingId] = useState(null);
+  const [endSessionTime, setEndSessionTime] = useState('');
+
   useEffect(() => {
     loadRecords();
   }, [babyId]);
@@ -42,16 +62,12 @@ export default function SleepPanel({ babyId }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-
     if (endTime) {
-      const start = new Date(startTime);
-      const end = new Date(endTime);
-      if (end <= start) {
+      if (new Date(endTime) <= new Date(startTime)) {
         setError('End time must be after start time');
         return;
       }
     }
-
     try {
       const record = await addSleepRecord(babyId, {
         start_time: new Date(startTime).toISOString(),
@@ -66,13 +82,47 @@ export default function SleepPanel({ babyId }) {
   };
 
   const handleEndSession = async (sleepId) => {
+    if (endingId !== sleepId) {
+      setEndingId(sleepId);
+      setEndSessionTime(getCurrentDateTime());
+      return;
+    }
     try {
       const updated = await updateSleepRecord(babyId, sleepId, {
-        end_time: new Date().toISOString(),
+        end_time: new Date(endSessionTime).toISOString(),
       });
       setRecords(records.map((r) => (r.id === sleepId ? updated : r)));
+      setEndingId(null);
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const startEdit = (r) => {
+    setEditingRecord(r);
+    setEditStart(toLocalInput(r.start_time));
+    setEditEnd(toLocalInput(r.end_time));
+    setEditNotes(r.notes || '');
+    setEditError('');
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    setEditError('');
+    if (editEnd && new Date(editEnd) <= new Date(editStart)) {
+      setEditError('End time must be after start time');
+      return;
+    }
+    try {
+      const updated = await updateSleepRecord(babyId, editingRecord.id, {
+        start_time: new Date(editStart).toISOString(),
+        end_time: editEnd ? new Date(editEnd).toISOString() : null,
+        notes: editNotes || null,
+      });
+      setRecords(records.map((r) => (r.id === updated.id ? updated : r)));
+      setEditingRecord(null);
+    } catch (err) {
+      setEditError(err.message);
     }
   };
 
@@ -101,12 +151,7 @@ export default function SleepPanel({ babyId }) {
   const formatTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
-    return date.toLocaleString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -120,40 +165,17 @@ export default function SleepPanel({ babyId }) {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label htmlFor="sleep-start">Start Time</label>
-              <input
-                id="sleep-start"
-                type="datetime-local"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                required
-              />
+              <input id="sleep-start" type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)} required />
             </div>
-
             <div className="form-group">
               <label htmlFor="sleep-end">End Time (leave empty if still sleeping)</label>
-              <input
-                id="sleep-end"
-                type="datetime-local"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-              />
+              <input id="sleep-end" type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
             </div>
-
             <div className="form-group">
               <label htmlFor="sleep-notes">Notes (optional)</label>
-              <textarea
-                id="sleep-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any notes about this sleep session..."
-                maxLength={500}
-                rows={2}
-                style={{ resize: 'vertical' }}
-              />
+              <textarea id="sleep-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any notes..." maxLength={500} rows={2} style={{ resize: 'vertical' }} />
             </div>
-
             {error && <p className="error-msg">{error}</p>}
-
             <div className="form-actions">
               <button type="submit" className="btn-success">Save</button>
               <button type="button" className="btn-secondary" onClick={resetForm}>Cancel</button>
@@ -173,25 +195,25 @@ export default function SleepPanel({ babyId }) {
           records.map((r) => (
             <div key={r.id} className="entry-item">
               <div className="entry-info">
-                <h4>
-                  😴 {formatTime(r.start_time)}
-                  {r.end_time ? ` — ${formatTime(r.end_time)}` : ''}
-                </h4>
+                <h4>😴 {formatTime(r.start_time)}{r.end_time ? ` — ${formatTime(r.end_time)}` : ''}</h4>
                 <p>
-                  {r.duration_minutes !== null ? (
-                    formatDuration(r.duration_minutes)
-                  ) : (
-                    <span style={{ color: 'var(--primary)', fontWeight: 600 }}>In Progress</span>
-                  )}
+                  {r.duration_minutes !== null ? formatDuration(r.duration_minutes) : <span style={{ color: 'var(--primary)', fontWeight: 600 }}>In Progress</span>}
                   {r.notes ? ` — ${r.notes}` : ''}
                 </p>
+                {/* End session with time picker */}
+                {endingId === r.id && (
+                  <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input type="datetime-local" value={endSessionTime} onChange={(e) => setEndSessionTime(e.target.value)} style={{ flex: 1, padding: '6px 8px', fontSize: 12 }} />
+                    <button className="btn-success btn-sm" onClick={() => handleEndSession(r.id)}>Save</button>
+                    <button className="btn-secondary btn-sm" onClick={() => setEndingId(null)}>Cancel</button>
+                  </div>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {r.duration_minutes === null && (
-                  <button className="btn-success btn-sm" onClick={() => handleEndSession(r.id)}>
-                    End
-                  </button>
+                {r.duration_minutes === null && endingId !== r.id && (
+                  <button className="btn-success btn-sm" onClick={() => handleEndSession(r.id)}>End</button>
                 )}
+                <button className="btn-outline btn-sm" onClick={() => startEdit(r)}>Edit</button>
                 {confirmDeleteId === r.id ? (
                   <>
                     <button className="btn-danger btn-sm" onClick={() => handleDelete(r.id)}>Delete</button>
@@ -205,6 +227,31 @@ export default function SleepPanel({ babyId }) {
           ))
         )}
       </div>
+
+      {/* Edit Modal */}
+      <Modal open={!!editingRecord} onClose={() => setEditingRecord(null)} title="Edit Sleep">
+        {editingRecord && (
+          <form onSubmit={handleSaveEdit}>
+            <div className="form-group">
+              <label>Start Time</label>
+              <input type="datetime-local" value={editStart} onChange={(e) => setEditStart(e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>End Time</label>
+              <input type="datetime-local" value={editEnd} onChange={(e) => setEditEnd(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Notes</label>
+              <textarea value={editNotes} onChange={(e) => setEditNotes(e.target.value)} maxLength={500} rows={2} style={{ resize: 'vertical' }} />
+            </div>
+            {editError && <p className="error-msg">{editError}</p>}
+            <div className="form-actions">
+              <button type="submit" className="btn-success">Save</button>
+              <button type="button" className="btn-secondary" onClick={() => setEditingRecord(null)}>Cancel</button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
